@@ -2,23 +2,31 @@ import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
+// --- GRAFİK KÜTÜPHANESİ İMPORTLARI ---
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
+import { Pie, Bar } from 'react-chartjs-2';
+
+// Grafikleri kullanabilmek için kayıt ediyoruz
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
+
 function App() {
   const [todos, setTodos] = useState([]);
   
-  // Ekleme State'leri
+  // State'ler
   const [newItem, setNewItem] = useState("");
   const [newPriority, setNewPriority] = useState(1);
   const [newDueDate, setNewDueDate] = useState("");
 
-  // Düzenleme State'leri
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editPriority, setEditPriority] = useState(1);
   const [editDate, setEditDate] = useState("");
 
-  // YENİ: ARAMA VE FİLTRE STATE'LERİ
-  const [searchTerm, setSearchTerm] = useState(""); // Arama kutusuna yazılan
-  const [filterType, setFilterType] = useState("all"); // all, active, completed, high
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("all");
+
+  // DASHBOARD GÖSTER/GİZLE
+  const [showDashboard, setShowDashboard] = useState(false); 
 
   const API_URL = "https://localhost:7221/api/Todo";
 
@@ -33,33 +41,48 @@ function App() {
       .catch(err => console.error(err));
   };
 
-  // --- CRUD İŞLEMLERİ (Ekle, Sil, Güncelle) ---
+  // --- İSTATİSTİK HESAPLAMALARI ---
+  const completedCount = todos.filter(t => t.isCompleted).length;
+  const pendingCount = todos.length - completedCount;
+
+  const lowP = todos.filter(t => t.priority === 1).length;
+  const mediumP = todos.filter(t => t.priority === 2).length;
+  const highP = todos.filter(t => t.priority === 3).length;
+
+  // --- GRAFİK VERİLERİ ---
+  const pieData = {
+    labels: ['Tamamlanan', 'Bekleyen'],
+    datasets: [
+      {
+        data: [completedCount, pendingCount],
+        backgroundColor: ['#198754', '#ffc107'], // Yeşil, Sarı
+        borderColor: ['#146c43', '#e0a800'],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const barData = {
+    labels: ['Düşük', 'Orta', 'Yüksek'],
+    datasets: [
+      {
+        label: 'Görev Sayısı',
+        data: [lowP, mediumP, highP],
+        backgroundColor: ['#198754', '#0dcaf0', '#dc3545'], // Yeşil, Mavi, Kırmızı
+      },
+    ],
+  };
+
+  // --- CRUD Fonsiyonları ---
   const addItem = () => {
     if (!newItem) return;
-    const taskToSend = { 
-      title: newItem, 
-      isCompleted: false,
-      priority: parseInt(newPriority),
-      dueDate: newDueDate ? newDueDate : null
-    };
-
-    fetch(API_URL, {
-      method: "POST",
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(taskToSend),
-    })
-    .then(res => res.json())
-    .then(() => {
-      setNewItem("");
-      setNewPriority(1);
-      setNewDueDate("");
-      fetchAPI();
-    });
+    const taskToSend = { title: newItem, isCompleted: false, priority: parseInt(newPriority), dueDate: newDueDate ? newDueDate : null };
+    fetch(API_URL, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskToSend) })
+    .then(res => res.json()).then(() => { setNewItem(""); setNewPriority(1); setNewDueDate(""); fetchAPI(); });
   };
 
   const deleteItem = (id) => {
-    fetch(`${API_URL}/${id}`, { method: "DELETE" })
-    .then(res => { if(res.ok) fetchAPI(); });
+    fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) fetchAPI(); });
   };
 
   const toggleComplete = (item) => {
@@ -68,102 +91,87 @@ function App() {
   };
 
   const startEditing = (item) => {
-    setEditingId(item.id);
-    setEditTitle(item.title);
-    setEditPriority(item.priority);
-    setEditDate(item.dueDate ? item.dueDate.split('T')[0] : ""); 
+    setEditingId(item.id); setEditTitle(item.title); setEditPriority(item.priority); setEditDate(item.dueDate ? item.dueDate.split('T')[0] : ""); 
   };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditTitle("");
-  };
-
+  const cancelEditing = () => { setEditingId(null); setEditTitle(""); };
   const saveEdit = (id, currentIsCompleted) => {
-    const updatedTask = {
-      id: id,
-      title: editTitle,
-      isCompleted: currentIsCompleted,
-      priority: parseInt(editPriority),
-      dueDate: editDate ? editDate : null
-    };
-    updateRequest(updatedTask);
-    setEditingId(null);
+    const updatedTask = { id, title: editTitle, isCompleted: currentIsCompleted, priority: parseInt(editPriority), dueDate: editDate ? editDate : null };
+    updateRequest(updatedTask); setEditingId(null);
   };
-
   const updateRequest = (taskObj) => {
-    fetch(`${API_URL}/${taskObj.id}`, {
-      method: "PUT",
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(taskObj)
-    })
-    .then(res => { if(res.ok) fetchAPI(); });
+    fetch(`${API_URL}/${taskObj.id}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskObj) }).then(res => { if(res.ok) fetchAPI(); });
   };
 
-  // --- MANTIK: FİLTRELEME MOTORU ---
-  // Bu kısım çok önemli. Ekrana 'todos'u değil, bu 'filteredTodos'u basacağız.
   const filteredTodos = todos.filter((item) => {
-    // 1. Arama Kriteri (Büyük/küçük harf duyarsız)
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // 2. Kategori Kriteri
     let matchesFilter = true;
-    if (filterType === "active") matchesFilter = !item.isCompleted;       // Sadece yapılmayanlar
-    if (filterType === "completed") matchesFilter = item.isCompleted;     // Sadece yapılanlar
-    if (filterType === "high") matchesFilter = item.priority === 3;       // Sadece Yüksek Öncelik
-
+    if (filterType === "active") matchesFilter = !item.isCompleted;
+    if (filterType === "completed") matchesFilter = item.isCompleted;
+    if (filterType === "high") matchesFilter = item.priority === 3;
     return matchesSearch && matchesFilter;
   });
 
-
-  // --- GÖRÜNÜM YARDIMCILARI ---
   const getPriorityBadge = (p) => {
     if(p === 1) return <span className="badge bg-success ms-2">Düşük</span>;
     if(p === 2) return <span className="badge bg-warning text-dark ms-2">Orta</span>;
     if(p === 3) return <span className="badge bg-danger ms-2">Yüksek</span>;
     return <span className="badge bg-secondary ms-2">Bilinmiyor</span>;
   };
-
   const formatDateInfo = (dateString, isCompleted) => {
     if (!dateString) return null;
-    const due = new Date(dateString);
-    const now = new Date();
-    now.setHours(0,0,0,0); due.setHours(0,0,0,0);
+    const due = new Date(dateString); const now = new Date(); now.setHours(0,0,0,0); due.setHours(0,0,0,0);
     const isPast = due < now;
     const formattedDate = new Date(dateString).toLocaleDateString('tr-TR');
-
-    return (
-      <span className="ms-2 text-muted" style={{ fontSize: "0.85rem" }}>
-        📅 {formattedDate}
-        {!isCompleted && isPast && <span className="badge bg-danger ms-1">GECİKTİ!</span>}
-      </span>
-    );
+    return <span className="ms-2 text-muted" style={{ fontSize: "0.85rem" }}>📅 {formattedDate}{!isCompleted && isPast && <span className="badge bg-danger ms-1">GECİKTİ!</span>}</span>;
   };
 
   return (
-    <div className="container mt-5">
+    <div className="container mt-4 mb-5">
       <div className="row justify-content-center">
-        <div className="col-md-9">
-          <div className="card shadow-lg border-0">
-            
-            <div className="card-header bg-primary text-white text-center py-3">
-              <h2 className="mb-0">🚀 Görev Kontrol Merkezi</h2>
-            </div>
+        <div className="col-md-10">
+          
+          <div className="d-flex justify-content-between align-items-center mb-3">
+             <h2 className="text-primary fw-bold">🚀 Görev Yöneticisi</h2>
+             {/* İSTATİSTİK AÇ/KAPA BUTONU */}
+             <button className="btn btn-outline-dark" onClick={() => setShowDashboard(!showDashboard)}>
+               {showDashboard ? "📊 Grafikleri Gizle" : "📊 İstatistikleri Göster"}
+             </button>
+          </div>
 
+          {/* --- DASHBOARD ALANI (Şarta Bağlı Gösterim) --- */}
+          {showDashboard && (
+            <div className="row mb-4">
+              <div className="col-md-6">
+                <div className="card shadow-sm border-0 h-100">
+                  <div className="card-header bg-white fw-bold text-center">Durum Analizi</div>
+                  <div className="card-body d-flex justify-content-center" style={{maxHeight: "300px"}}>
+                    <Pie data={pieData} />
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-6 mt-3 mt-md-0">
+                 <div className="card shadow-sm border-0 h-100">
+                  <div className="card-header bg-white fw-bold text-center">Öncelik Dağılımı</div>
+                  <div className="card-body d-flex justify-content-center" style={{maxHeight: "300px"}}>
+                    <Bar data={barData} options={{ responsive: true, plugins: { legend: { display: false } } }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="card shadow-lg border-0">
+            <div className="card-header bg-primary text-white py-3">
+              <h5 className="mb-0 text-center">Listem</h5>
+            </div>
             <div className="card-body">
 
-              {/* --- YENİ BÖLÜM: ARAMA VE FİLTRE --- */}
+              {/* ARAMA & FİLTRE */}
               <div className="row mb-4 p-3 bg-light rounded mx-1">
                 <div className="col-md-6 mb-2 mb-md-0">
-                  <input 
-                    type="text" 
-                    className="form-control" 
-                    placeholder="🔍 Görev ara..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                  <input type="text" className="form-control" placeholder="🔍 Görev ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
-                <div className="col-md-6 d-flex justify-content-md-end gap-2">
+                <div className="col-md-6 d-flex justify-content-md-end gap-2 flex-wrap">
                   <button className={`btn btn-sm ${filterType==='all' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setFilterType('all')}>Tümü</button>
                   <button className={`btn btn-sm ${filterType==='active' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setFilterType('active')}>Yapılacaklar</button>
                   <button className={`btn btn-sm ${filterType==='completed' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setFilterType('completed')}>Bitenler</button>
@@ -171,52 +179,28 @@ function App() {
                 </div>
               </div>
               
-              {/* EKLEME ALANI */}
+              {/* EKLEME */}
               <div className="row g-2 mb-4">
-                <div className="col-md-5">
-                  <input type="text" className="form-control" placeholder="Yeni görev..." value={newItem} onChange={(e) => setNewItem(e.target.value)} />
-                </div>
-                <div className="col-md-3">
-                  <input type="date" className="form-control" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
-                </div>
-                <div className="col-md-3">
-                   <select className="form-select" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}>
-                      <option value="1">🟢 Düşük</option>
-                      <option value="2">🟡 Orta</option>
-                      <option value="3">🔴 Yüksek</option>
-                    </select>
-                </div>
-                <div className="col-md-1">
-                  <button className="btn btn-success w-100" onClick={addItem}>+</button>
-                </div>
+                <div className="col-md-5"><input type="text" className="form-control" placeholder="Yeni görev..." value={newItem} onChange={(e) => setNewItem(e.target.value)} /></div>
+                <div className="col-md-3"><input type="date" className="form-control" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} /></div>
+                <div className="col-md-3"><select className="form-select" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}><option value="1">🟢 Düşük</option><option value="2">🟡 Orta</option><option value="3">🔴 Yüksek</option></select></div>
+                <div className="col-md-1"><button className="btn btn-success w-100" onClick={addItem}>+</button></div>
               </div>
 
-              {/* LİSTE (Artık filteredTodos kullanıyoruz) */}
+              {/* LİSTE */}
               <ul className="list-group list-group-flush">
-                {filteredTodos.length === 0 && (
-                  <div className="text-center text-muted my-3">
-                    Aradığınız kriterde görev bulunamadı. 🤷‍♂️
-                  </div>
-                )}
-
+                {filteredTodos.length === 0 && <div className="text-center text-muted my-3">Kayıt bulunamadı.</div>}
                 {filteredTodos.map((gorev) => (
                   <li key={gorev.id} className={`list-group-item ${gorev.isCompleted ? 'bg-light' : ''}`}>
-                    
                     {editingId === gorev.id ? (
-                      // DÜZENLEME MODU
                       <div className="d-flex gap-2 align-items-center flex-wrap">
                         <input type="text" className="form-control" style={{flex:1}} value={editTitle} onChange={(e)=>setEditTitle(e.target.value)} />
-                        <select className="form-select" style={{width:"110px"}} value={editPriority} onChange={(e)=>setEditPriority(e.target.value)}>
-                          <option value="1">Düşük</option>
-                          <option value="2">Orta</option>
-                          <option value="3">Yüksek</option>
-                        </select>
+                        <select className="form-select" style={{width:"110px"}} value={editPriority} onChange={(e)=>setEditPriority(e.target.value)}><option value="1">Düşük</option><option value="2">Orta</option><option value="3">Yüksek</option></select>
                         <input type="date" className="form-control" style={{width:"140px"}} value={editDate} onChange={(e)=>setEditDate(e.target.value)} />
                         <button className="btn btn-sm btn-success" onClick={() => saveEdit(gorev.id, gorev.isCompleted)}>💾</button>
                         <button className="btn btn-sm btn-secondary" onClick={cancelEditing}>🚫</button>
                       </div>
                     ) : (
-                      // NORMAL GÖRÜNÜM
                       <div className="d-flex justify-content-between align-items-center">
                         <div style={{ flex: 1, cursor: "pointer" }} onClick={() => toggleComplete(gorev)}>
                           <span style={{ fontSize: "1.2rem", marginRight: "10px" }}>{gorev.isCompleted ? "✅" : "⬜"}</span>
@@ -233,7 +217,6 @@ function App() {
                   </li>
                 ))}
               </ul>
-
             </div>
           </div>
         </div>
