@@ -1,0 +1,64 @@
+/* --- TEMA DEĞİŞKENLERİ --- */
+:root {
+  /* Varsayılan (Aydınlık) Tema */
+  --bg-body: #f0f2f5;
+  --text-main: #212529;
+  --bg-card: #ffffff;
+  --border-color: #dee2e6;
+  --input-bg: #ffffff;
+  --input-text: #212529;
+  --shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Karanlık Tema (data-theme='dark' olduğunda devreye girer) */
+[data-theme='dark'] {
+  --bg-body: #121212;         /* Simsiyah arka plan */
+  --text-main: #e0e0e0;       /* Açık gri yazı */
+  --bg-card: #1e1e1e;         /* Koyu gri kartlar */
+  --border-color: #2d2d2d;
+  --input-bg: #2d2d2d;
+  --input-text: #ffffff;
+  --shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+}
+
+/* --- GENEL AYARLAR --- */
+body {
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  transition: background-color 0.3s, color 0.3s; /* Yumuşak geçiş efekti */
+}
+
+/* Kartların Rengini Değişkenlere Bağlayalım */
+.card {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main);
+  border: 1px solid var(--border-color) !important;
+}
+
+.card-header {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Listeler ve Inputlar */
+.list-group-item {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+.form-control, .form-select {
+  background-color: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Bootstrap'in mavi focus halkasını düzeltme */
+.form-control:focus, .form-select:focus {
+  background-color: var(--input-bg) !important;
+  color: var(--input-text) !important;
+}
+
+/* Karanlık modda placeholder yazısı görünür olsun */
+[data-theme='dark'] ::placeholder {
+  color: #aaa;
+}
