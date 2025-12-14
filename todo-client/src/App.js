@@ -11,32 +11,34 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 function App() {
   const [todos, setTodos] = useState([]);
   
-  // DARK MODE STATE
-  // Başlangıçta localStorage'a bak, yoksa 'false' (aydınlık) olsun
+  // DARK MODE
   const [darkMode, setDarkMode] = useState(() => {
     const savedMode = localStorage.getItem("darkMode");
     return savedMode === "true";
   });
 
-  // State'ler
+  // --- STATE'LER ---
   const [newItem, setNewItem] = useState("");
   const [newPriority, setNewPriority] = useState(1);
   const [newDueDate, setNewDueDate] = useState("");
+  // YENİ: Kategori State'i (Varsayılan: Genel)
+  const [newCategory, setNewCategory] = useState("Genel");
+
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editPriority, setEditPriority] = useState(1);
   const [editDate, setEditDate] = useState("");
+  const [editCategory, setEditCategory] = useState("Genel"); // Düzenleme için
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [showDashboard, setShowDashboard] = useState(false); 
 
   const API_URL = "https://localhost:7221/api/Todo";
 
-  // --- DARK MODE MANTIĞI (SİHİR BURADA) ---
+  // Dark Mode Etkisi
   useEffect(() => {
-    // 1. HTML etiketine 'data-theme' özelliğini ekle/kaldır
     document.body.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    // 2. Tercihi tarayıcı hafızasına kaydet
     localStorage.setItem("darkMode", darkMode);
   }, [darkMode]);
 
@@ -48,7 +50,7 @@ function App() {
     fetch(API_URL).then(res => res.json()).then(data => setTodos(data)).catch(err => console.error(err));
   };
 
-  // İstatistikler
+  // --- İSTATİSTİKLER ---
   const completedCount = todos.filter(t => t.isCompleted).length;
   const pendingCount = todos.length - completedCount;
   const lowP = todos.filter(t => t.priority === 1).length;
@@ -60,7 +62,7 @@ function App() {
     datasets: [{
         data: [completedCount, pendingCount],
         backgroundColor: ['#198754', '#ffc107'],
-        borderColor: darkMode ? '#1e1e1e' : '#fff', // Çizgiler temaya uysun
+        borderColor: darkMode ? '#1e1e1e' : '#fff',
         borderWidth: 2,
     }],
   };
@@ -74,33 +76,75 @@ function App() {
     }],
   };
   
-  // Grafik Yazı Renk Ayarı (Karanlık modda yazılar beyaz olsun)
   const chartOptions = {
     responsive: true,
-    plugins: {
-        legend: { labels: { color: darkMode ? '#e0e0e0' : '#666' } } // Efsane yazı rengi
-    },
+    plugins: { legend: { labels: { color: darkMode ? '#e0e0e0' : '#666' } } },
     scales: {
-        x: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } }, // X ekseni rengi
-        y: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } }  // Y ekseni rengi
+        x: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } },
+        y: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } }
     }
   };
 
-  // CRUD
+  // --- CRUD İŞLEMLERİ ---
   const addItem = () => {
     if (!newItem) return;
-    const taskToSend = { title: newItem, isCompleted: false, priority: parseInt(newPriority), dueDate: newDueDate ? newDueDate : null };
-    fetch(API_URL, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskToSend) })
-    .then(res => res.json()).then(() => { setNewItem(""); setNewPriority(1); setNewDueDate(""); fetchAPI(); });
-  };
-  const deleteItem = (id) => { fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) fetchAPI(); }); };
-  const toggleComplete = (item) => { updateRequest({ ...item, isCompleted: !item.isCompleted }); };
-  const updateRequest = (taskObj) => { fetch(`${API_URL}/${taskObj.id}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskObj) }).then(res => { if(res.ok) fetchAPI(); }); };
-  
-  // Edit logic
-  const startEditing = (item) => { setEditingId(item.id); setEditTitle(item.title); setEditPriority(item.priority); setEditDate(item.dueDate ? item.dueDate.split('T')[0] : ""); };
-  const saveEdit = (id, cur) => { updateRequest({ id, title: editTitle, isCompleted: cur, priority: parseInt(editPriority), dueDate: editDate ? editDate : null }); setEditingId(null); };
+    const taskToSend = { 
+      title: newItem, 
+      isCompleted: false, 
+      priority: parseInt(newPriority), 
+      dueDate: newDueDate ? newDueDate : null,
+      category: newCategory // Kategori bilgisini gönderiyoruz
+    };
 
+    fetch(API_URL, { 
+      method: "POST", 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(taskToSend) 
+    })
+    .then(res => res.json())
+    .then(() => { 
+      setNewItem(""); 
+      setNewPriority(1); 
+      setNewDueDate("");
+      setNewCategory("Genel"); // Sıfırla
+      fetchAPI(); 
+    });
+  };
+
+  const deleteItem = (id) => { fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) fetchAPI(); }); };
+  
+  const toggleComplete = (item) => { updateRequest({ ...item, isCompleted: !item.isCompleted }); };
+  
+  const updateRequest = (taskObj) => { 
+    fetch(`${API_URL}/${taskObj.id}`, { 
+      method: "PUT", 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(taskObj) 
+    }).then(res => { if(res.ok) fetchAPI(); }); 
+  };
+  
+  // DÜZENLEME
+  const startEditing = (item) => { 
+    setEditingId(item.id); 
+    setEditTitle(item.title); 
+    setEditPriority(item.priority); 
+    setEditDate(item.dueDate ? item.dueDate.split('T')[0] : "");
+    setEditCategory(item.category || "Genel"); 
+  };
+  
+  const saveEdit = (id, cur) => { 
+    updateRequest({ 
+      id, 
+      title: editTitle, 
+      isCompleted: cur, 
+      priority: parseInt(editPriority), 
+      dueDate: editDate ? editDate : null,
+      category: editCategory
+    }); 
+    setEditingId(null); 
+  };
+
+  // FİLTRELEME
   const filteredTodos = todos.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
     let matchesFilter = true;
@@ -110,6 +154,7 @@ function App() {
     return matchesSearch && matchesFilter;
   });
 
+  // Görünüm Yardımcıları
   const getPriorityBadge = (p) => {
     if(p === 1) return <span className="badge bg-success ms-2">Düşük</span>;
     if(p === 2) return <span className="badge bg-warning text-dark ms-2">Orta</span>;
@@ -131,19 +176,11 @@ function App() {
           
           <div className="d-flex justify-content-between align-items-center mb-4">
              <h2 className={`fw-bold ${darkMode ? 'text-info' : 'text-primary'}`}>🚀 Görev Yöneticisi</h2>
-             
              <div className="d-flex gap-2">
-                {/* İSTATİSTİK BUTONU */}
                 <button className={`btn ${darkMode ? 'btn-outline-light' : 'btn-outline-dark'}`} onClick={() => setShowDashboard(!showDashboard)}>
                   {showDashboard ? "Gizle" : "📊 Analiz"}
                 </button>
-
-                {/* --- DARK MODE BUTONU --- */}
-                <button 
-                  className={`btn ${darkMode ? 'btn-warning' : 'btn-secondary'}`} 
-                  onClick={() => setDarkMode(!darkMode)}
-                  style={{ minWidth: "50px" }}
-                >
+                <button className={`btn ${darkMode ? 'btn-warning' : 'btn-secondary'}`} onClick={() => setDarkMode(!darkMode)} style={{ minWidth: "50px" }}>
                   {darkMode ? "☀️" : "🌙"}
                 </button>
              </div>
@@ -154,7 +191,7 @@ function App() {
             <div className="row mb-4">
               <div className="col-md-6">
                 <div className="card shadow-sm h-100">
-                  <div className="card-header fw-bold text-center">Durum Analizi</div>
+                  <div className="card-header fw-bold text-center">Durum</div>
                   <div className="card-body d-flex justify-content-center" style={{maxHeight: "300px"}}>
                     <Pie data={pieData} options={chartOptions} />
                   </div>
@@ -162,7 +199,7 @@ function App() {
               </div>
               <div className="col-md-6 mt-3 mt-md-0">
                  <div className="card shadow-sm h-100">
-                  <div className="card-header fw-bold text-center">Öncelik Dağılımı</div>
+                  <div className="card-header fw-bold text-center">Öncelik</div>
                   <div className="card-body d-flex justify-content-center" style={{maxHeight: "300px"}}>
                     <Bar data={barData} options={{ ...chartOptions, plugins: { legend: { display: false } } }} />
                   </div>
@@ -177,7 +214,7 @@ function App() {
             </div>
             <div className="card-body">
 
-              {/* FİLTRE & ARAMA ALANI (Rengi CSS değişkeninden alacak) */}
+              {/* FİLTRE & ARAMA */}
               <div className="row mb-4 p-3 rounded mx-1" style={{ border: "1px solid var(--border-color)", backgroundColor: "rgba(0,0,0,0.03)" }}>
                 <div className="col-md-6 mb-2 mb-md-0">
                   <input type="text" className="form-control" placeholder="🔍 Görev ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -190,12 +227,36 @@ function App() {
                 </div>
               </div>
               
-              {/* EKLEME */}
+              {/* EKLEME ALANI (Genişletildi) */}
               <div className="row g-2 mb-4">
-                <div className="col-md-5"><input type="text" className="form-control" placeholder="Yeni görev..." value={newItem} onChange={(e) => setNewItem(e.target.value)} /></div>
-                <div className="col-md-3"><input type="date" className="form-control" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} /></div>
-                <div className="col-md-3"><select className="form-select" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}><option value="1">🟢 Düşük</option><option value="2">🟡 Orta</option><option value="3">🔴 Yüksek</option></select></div>
-                <div className="col-md-1"><button className="btn btn-success w-100" onClick={addItem}>+</button></div>
+                <div className="col-md-4">
+                  <input type="text" className="form-control" placeholder="Yeni görev..." value={newItem} onChange={(e) => setNewItem(e.target.value)} />
+                </div>
+                
+                {/* KATEGORİ SEÇİMİ (YENİ) */}
+                <div className="col-md-2">
+                   <select className="form-select" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
+                      <option value="Genel">🏠 Genel</option>
+                      <option value="İş">💼 İş</option>
+                      <option value="Okul">🎓 Okul</option>
+                      <option value="Alışveriş">🛒 Alışveriş</option>
+                      <option value="Spor">💪 Spor</option>
+                    </select>
+                </div>
+
+                <div className="col-md-3">
+                  <input type="date" className="form-control" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+                </div>
+                <div className="col-md-2">
+                  <select className="form-select" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}>
+                    <option value="1">🟢 Düşük</option>
+                    <option value="2">🟡 Orta</option>
+                    <option value="3">🔴 Yüksek</option>
+                  </select>
+                </div>
+                <div className="col-md-1">
+                  <button className="btn btn-success w-100" onClick={addItem}>+</button>
+                </div>
               </div>
 
               {/* LİSTE */}
@@ -203,14 +264,26 @@ function App() {
                 {filteredTodos.map((gorev) => (
                   <li key={gorev.id} className="list-group-item">
                     {editingId === gorev.id ? (
+                      // EDIT MODE
                       <div className="d-flex gap-2 align-items-center flex-wrap">
                         <input type="text" className="form-control" style={{flex:1}} value={editTitle} onChange={(e)=>setEditTitle(e.target.value)} />
-                        <select className="form-select" style={{width:"110px"}} value={editPriority} onChange={(e)=>setEditPriority(e.target.value)}><option value="1">Düşük</option><option value="2">Orta</option><option value="3">Yüksek</option></select>
-                        <input type="date" className="form-control" style={{width:"140px"}} value={editDate} onChange={(e)=>setEditDate(e.target.value)} />
+                        
+                        {/* Edit Modunda Kategori Değiştirme */}
+                        <select className="form-select" style={{width:"100px"}} value={editCategory} onChange={(e)=>setEditCategory(e.target.value)}>
+                          <option value="Genel">Genel</option>
+                          <option value="İş">İş</option>
+                          <option value="Okul">Okul</option>
+                          <option value="Alışveriş">Alışveriş</option>
+                          <option value="Spor">Spor</option>
+                        </select>
+
+                        <select className="form-select" style={{width:"90px"}} value={editPriority} onChange={(e)=>setEditPriority(e.target.value)}><option value="1">Düşük</option><option value="2">Orta</option><option value="3">Yüksek</option></select>
+                        <input type="date" className="form-control" style={{width:"130px"}} value={editDate} onChange={(e)=>setEditDate(e.target.value)} />
                         <button className="btn btn-sm btn-success" onClick={() => saveEdit(gorev.id, gorev.isCompleted)}>💾</button>
                         <button className="btn btn-sm btn-secondary" onClick={() => setEditingId(null)}>🚫</button>
                       </div>
                     ) : (
+                      // NORMAL MODE
                       <div className="d-flex justify-content-between align-items-center">
                         <div style={{ flex: 1, cursor: "pointer" }} onClick={() => toggleComplete(gorev)}>
                           <span style={{ fontSize: "1.2rem", marginRight: "10px" }}>{gorev.isCompleted ? "✅" : "⬜"}</span>
@@ -219,6 +292,10 @@ function App() {
                             fontWeight: "500",
                             color: gorev.isCompleted ? (darkMode ? '#777' : '#aaa') : 'inherit'
                           }}>{gorev.title}</span>
+                          
+                          {/* KATEGORİ ETİKETİ */}
+                          <span className="badge bg-info text-dark ms-2">{gorev.category || "Genel"}</span>
+
                           {getPriorityBadge(gorev.priority)}
                           {formatDateInfo(gorev.dueDate, gorev.isCompleted)}
                         </div>

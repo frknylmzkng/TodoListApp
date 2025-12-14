@@ -13,5 +13,9 @@
         // YENİ EKLENEN: Soru işareti (?) "Boş olabilir" demektir.
         // Yani kullanıcı tarih seçmek zorunda değil.
         public DateTime? DueDate { get; set; }
+
+        // YENİ EKLENEN: Kategori (İş, Okul, Ev...)
+        // Soru işareti (?) koyduk ki boş bırakılabilsin.
+        public string? Category { get; set; }
     }
 }

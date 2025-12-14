@@ -52,13 +52,14 @@ namespace TodoListApi.Repositories
             var existing = _context.TodoItems.Find(item.Id);
             if (existing != null)
             {
-                // Eski kodlar:
                 existing.Title = item.Title;
                 existing.IsCompleted = item.IsCompleted;
-
-                // YENİ EKLENENLER (Bunları unutursak güncelleme çalışmaz):
                 existing.Priority = item.Priority;
                 existing.DueDate = item.DueDate;
+
+                // --- EKSİK OLAN SATIR BU ---
+                existing.Category = item.Category;
+                // ---------------------------
 
                 _context.SaveChanges();
             }
