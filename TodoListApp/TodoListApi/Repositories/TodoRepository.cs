@@ -31,7 +31,15 @@ namespace TodoListApi.Repositories
 
         public List<TodoItem> GetAll()
         {
-            return _context.TodoItems.ToList();
+            // ESKİ HALİ: return _context.TodoItems.ToList();
+
+            // YENİ HALİ:
+            // 1. Önce Priority'ye göre BÜYÜKTEN KÜÇÜĞE sırala (3 -> 2 -> 1)
+            // 2. Eğer puanları eşitse, ID'ye göre tersten sırala (En son eklenen en üstte olsun)
+            return _context.TodoItems
+                           .OrderByDescending(x => x.Priority)
+                           .ThenByDescending(x => x.Id)
+                           .ToList();
         }
 
         public TodoItem GetById(int id)
