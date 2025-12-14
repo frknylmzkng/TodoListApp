@@ -1,0 +1,10 @@
+# Gereksiz C# Dosyaları
+bin/
+obj/
+.vs/
+*.user
+
+# Gereksiz React Dosyaları
+node_modules/
+build/
+.env
