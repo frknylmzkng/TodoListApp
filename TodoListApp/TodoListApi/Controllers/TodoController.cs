@@ -18,11 +18,11 @@ namespace TodoListApi.Controllers
         }
 
         [HttpGet]
-        public IActionResult Get()
+        public IActionResult GetAll([FromQuery] int userId)
         {
-            // Veritabanı kodları yerine metoda çağrı yapıyoruz:
-            var liste = _repository.GetAll();
-            return Ok(liste);
+            // Repository'ye ID'yi gönderiyor muyuz?
+            var todos = _repository.GetAll(userId);
+            return Ok(todos);
         }
 
         [HttpPost]

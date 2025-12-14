@@ -17,5 +17,8 @@
         // YENİ EKLENEN: Kategori (İş, Okul, Ev...)
         // Soru işareti (?) koyduk ki boş bırakılabilsin.
         public string? Category { get; set; }
+
+        // YENİ: Bu görev kime ait?
+        public int UserId { get; set; }
     }
 }

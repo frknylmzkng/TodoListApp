@@ -8,27 +8,102 @@ import { Pie, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+// --- 1. GİRİŞ/KAYIT EKRANI COMPONENTİ ---
+const AuthScreen = ({ onLogin }) => {
+  const [isLoginMode, setIsLoginMode] = useState(true); // Giriş mi Kayıt mı?
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError("");
+
+    const endpoint = isLoginMode ? "login" : "register";
+    const API_URL = `https://localhost:7221/api/Auth/${endpoint}`;
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    })
+    .then(async (res) => {
+      const data = await res.text(); // Backend'den gelen cevabı oku
+      
+      if (!res.ok) {
+        throw new Error(data || "Bir hata oluştu");
+      }
+
+      if (isLoginMode) {
+        // GİRİŞ BAŞARILI: Backend bize UserID döndü
+        // ID'yi 'data' içinden alıp ana uygulamaya gönderiyoruz
+        onLogin(data); 
+      } else {
+        // KAYIT BAŞARILI
+        alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
+        setIsLoginMode(true); // Giriş ekranına dön
+        setPassword("");
+      }
+    })
+    .catch(err => setError(err.message));
+  };
+
+  return (
+    <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
+      <div className="card shadow-lg p-4" style={{ width: "400px" }}>
+        <h3 className="text-center text-primary mb-4">{isLoginMode ? "Giriş Yap" : "Kayıt Ol"}</h3>
+        
+        {error && <div className="alert alert-danger">{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label>Kullanıcı Adı</label>
+            <input 
+              type="text" className="form-control" required 
+              value={username} onChange={(e)=>setUsername(e.target.value)}
+            />
+          </div>
+          <div className="mb-3">
+            <label>Şifre</label>
+            <input 
+              type="password" className="form-control" required 
+              value={password} onChange={(e)=>setPassword(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn btn-primary w-100">
+            {isLoginMode ? "Giriş Yap" : "Kayıt Ol"}
+          </button>
+        </form>
+
+        <div className="text-center mt-3">
+          <button className="btn btn-link" onClick={() => setIsLoginMode(!isLoginMode)}>
+            {isLoginMode ? "Hesabın yok mu? Kayıt Ol" : "Zaten üye misin? Giriş Yap"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 2. ANA UYGULAMA (GÖREV YÖNETİCİSİ) ---
 function App() {
+  // KULLANICI OTURUMU STATE'İ
+  const [userId, setUserId] = useState(() => localStorage.getItem("userId")); 
+
   const [todos, setTodos] = useState([]);
   
-  // DARK MODE
-  const [darkMode, setDarkMode] = useState(() => {
-    const savedMode = localStorage.getItem("darkMode");
-    return savedMode === "true";
-  });
-
-  // --- STATE'LER ---
+  // Diğer State'ler...
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("darkMode") === "true");
   const [newItem, setNewItem] = useState("");
   const [newPriority, setNewPriority] = useState(1);
   const [newDueDate, setNewDueDate] = useState("");
-  // YENİ: Kategori State'i (Varsayılan: Genel)
   const [newCategory, setNewCategory] = useState("Genel");
 
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editPriority, setEditPriority] = useState(1);
   const [editDate, setEditDate] = useState("");
-  const [editCategory, setEditCategory] = useState("Genel"); // Düzenleme için
+  const [editCategory, setEditCategory] = useState("Genel");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -36,21 +111,45 @@ function App() {
 
   const API_URL = "https://localhost:7221/api/Todo";
 
-  // Dark Mode Etkisi
+  // Giriş Yapılınca Çalışır
+  const handleLogin = (id) => {
+    setUserId(id);
+    localStorage.setItem("userId", id); // Tarayıcıya kaydet (Yenileyince gitmesin)
+  };
+
+  // Çıkış Yapılınca Çalışır
+  const handleLogout = () => {
+    setUserId(null);
+    localStorage.removeItem("userId");
+    setTodos([]); // Listeyi temizle
+  };
+
   useEffect(() => {
     document.body.setAttribute('data-theme', darkMode ? 'dark' : 'light');
     localStorage.setItem("darkMode", darkMode);
   }, [darkMode]);
 
-  useEffect(() => {
-    fetchAPI();
-  }, []);
+useEffect(() => {
+    // Sadece userId varsa verileri çek
+    if (userId) {
+      fetchAPI();
+    }
+  }, [userId]); // userId değiştiğinde (giriş yapıldığında) bu kod tekrar çalışsın
 
-  const fetchAPI = () => {
-    fetch(API_URL).then(res => res.json()).then(data => setTodos(data)).catch(err => console.error(err));
+const fetchAPI = () => {
+    // 1. Eğer giriş yapmış bir kullanıcı yoksa (userId boşsa), sunucuyu rahatsız etme.
+    if (!userId) return; 
+    
+    // 2. BACKTICK (AltGr + ; tuşu) KULLANMAYA DİKKAT!
+    // Normal tırnak (') veya çift tırnak (") DEĞİL, şu yatık tırnak (` `) olmalı.
+    // Böylece ${userId} içine gerçek sayı yerleşir.
+    fetch(`${API_URL}?userId=${userId}`) 
+      .then(res => res.json())
+      .then(data => setTodos(data))
+      .catch(err => console.error(err));
   };
 
-  // --- İSTATİSTİKLER ---
+  // ... (Geri kalan CRUD fonksiyonları aynen devam ediyor) ...
   const completedCount = todos.filter(t => t.isCompleted).length;
   const pendingCount = todos.length - completedCount;
   const lowP = todos.filter(t => t.priority === 1).length;
@@ -59,92 +158,56 @@ function App() {
 
   const pieData = {
     labels: ['Tamamlanan', 'Bekleyen'],
-    datasets: [{
-        data: [completedCount, pendingCount],
-        backgroundColor: ['#198754', '#ffc107'],
-        borderColor: darkMode ? '#1e1e1e' : '#fff',
-        borderWidth: 2,
-    }],
+    datasets: [{ data: [completedCount, pendingCount], backgroundColor: ['#198754', '#ffc107'], borderColor: darkMode ? '#1e1e1e' : '#fff', borderWidth: 2 }],
   };
 
   const barData = {
     labels: ['Düşük', 'Orta', 'Yüksek'],
-    datasets: [{
-        label: 'Görev Sayısı',
-        data: [lowP, mediumP, highP],
-        backgroundColor: ['#198754', '#0dcaf0', '#dc3545'],
-    }],
+    datasets: [{ label: 'Görev Sayısı', data: [lowP, mediumP, highP], backgroundColor: ['#198754', '#0dcaf0', '#dc3545'] }],
   };
   
   const chartOptions = {
     responsive: true,
     plugins: { legend: { labels: { color: darkMode ? '#e0e0e0' : '#666' } } },
-    scales: {
-        x: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } },
-        y: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } }
-    }
+    scales: { x: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } }, y: { ticks: { color: darkMode ? '#e0e0e0' : '#666' } } }
   };
 
-  // --- CRUD İŞLEMLERİ ---
-  const addItem = () => {
+const addItem = () => {
     if (!newItem) return;
+
     const taskToSend = { 
       title: newItem, 
       isCompleted: false, 
       priority: parseInt(newPriority), 
-      dueDate: newDueDate ? newDueDate : null,
-      category: newCategory // Kategori bilgisini gönderiyoruz
+      dueDate: newDueDate ? newDueDate : null, 
+      category: newCategory,
+      
+      userId: parseInt(userId) // YENİ: Bu görevi şu anki kullanıcıya zimmetle!
     };
 
-    fetch(API_URL, { 
-      method: "POST", 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(taskToSend) 
+    fetch(API_URL, {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(taskToSend),
     })
     .then(res => res.json())
-    .then(() => { 
+    .then(() => {
+      // Temizlik işlemleri...
       setNewItem(""); 
       setNewPriority(1); 
       setNewDueDate("");
-      setNewCategory("Genel"); // Sıfırla
-      fetchAPI(); 
+      setNewCategory("Genel");
+      fetchAPI(); // Listeyi yenile
     });
   };
 
   const deleteItem = (id) => { fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) fetchAPI(); }); };
-  
   const toggleComplete = (item) => { updateRequest({ ...item, isCompleted: !item.isCompleted }); };
+  const updateRequest = (taskObj) => { fetch(`${API_URL}/${taskObj.id}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskObj) }).then(res => { if(res.ok) fetchAPI(); }); };
   
-  const updateRequest = (taskObj) => { 
-    fetch(`${API_URL}/${taskObj.id}`, { 
-      method: "PUT", 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify(taskObj) 
-    }).then(res => { if(res.ok) fetchAPI(); }); 
-  };
-  
-  // DÜZENLEME
-  const startEditing = (item) => { 
-    setEditingId(item.id); 
-    setEditTitle(item.title); 
-    setEditPriority(item.priority); 
-    setEditDate(item.dueDate ? item.dueDate.split('T')[0] : "");
-    setEditCategory(item.category || "Genel"); 
-  };
-  
-  const saveEdit = (id, cur) => { 
-    updateRequest({ 
-      id, 
-      title: editTitle, 
-      isCompleted: cur, 
-      priority: parseInt(editPriority), 
-      dueDate: editDate ? editDate : null,
-      category: editCategory
-    }); 
-    setEditingId(null); 
-  };
+  const startEditing = (item) => { setEditingId(item.id); setEditTitle(item.title); setEditPriority(item.priority); setEditDate(item.dueDate ? item.dueDate.split('T')[0] : ""); setEditCategory(item.category || "Genel"); };
+  const saveEdit = (id, cur) => { updateRequest({ id, title: editTitle, isCompleted: cur, priority: parseInt(editPriority), dueDate: editDate ? editDate : null, category: editCategory }); setEditingId(null); };
 
-  // FİLTRELEME
   const filteredTodos = todos.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
     let matchesFilter = true;
@@ -154,7 +217,6 @@ function App() {
     return matchesSearch && matchesFilter;
   });
 
-  // Görünüm Yardımcıları
   const getPriorityBadge = (p) => {
     if(p === 1) return <span className="badge bg-success ms-2">Düşük</span>;
     if(p === 2) return <span className="badge bg-warning text-dark ms-2">Orta</span>;
@@ -168,6 +230,12 @@ function App() {
     const isPast = due < now;
     return <span className={`ms-2 ${darkMode ? 'text-light opacity-75' : 'text-muted'}`} style={{ fontSize: "0.85rem" }}>📅 {new Date(dateString).toLocaleDateString('tr-TR')}{!isCompleted && isPast && <span className="badge bg-danger ms-1">GECİKTİ!</span>}</span>;
   };
+
+  // --- 3. EKRAN KONTROLÜ ---
+  // Eğer UserID yoksa AUTH ekranını göster, varsa UYGULAMAYI göster
+  if (!userId) {
+    return <AuthScreen onLogin={handleLogin} />;
+  }
 
   return (
     <div className="container mt-4 mb-5">
@@ -183,6 +251,9 @@ function App() {
                 <button className={`btn ${darkMode ? 'btn-warning' : 'btn-secondary'}`} onClick={() => setDarkMode(!darkMode)} style={{ minWidth: "50px" }}>
                   {darkMode ? "☀️" : "🌙"}
                 </button>
+                
+                {/* ÇIKIŞ BUTONU */}
+                <button className="btn btn-danger ms-2" onClick={handleLogout}>Çıkış Yap</button>
              </div>
           </div>
 
@@ -227,13 +298,11 @@ function App() {
                 </div>
               </div>
               
-              {/* EKLEME ALANI (Genişletildi) */}
+              {/* EKLEME ALANI */}
               <div className="row g-2 mb-4">
                 <div className="col-md-4">
                   <input type="text" className="form-control" placeholder="Yeni görev..." value={newItem} onChange={(e) => setNewItem(e.target.value)} />
                 </div>
-                
-                {/* KATEGORİ SEÇİMİ (YENİ) */}
                 <div className="col-md-2">
                    <select className="form-select" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
                       <option value="Genel">🏠 Genel</option>
@@ -243,7 +312,6 @@ function App() {
                       <option value="Spor">💪 Spor</option>
                     </select>
                 </div>
-
                 <div className="col-md-3">
                   <input type="date" className="form-control" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
                 </div>
@@ -264,38 +332,20 @@ function App() {
                 {filteredTodos.map((gorev) => (
                   <li key={gorev.id} className="list-group-item">
                     {editingId === gorev.id ? (
-                      // EDIT MODE
                       <div className="d-flex gap-2 align-items-center flex-wrap">
                         <input type="text" className="form-control" style={{flex:1}} value={editTitle} onChange={(e)=>setEditTitle(e.target.value)} />
-                        
-                        {/* Edit Modunda Kategori Değiştirme */}
-                        <select className="form-select" style={{width:"100px"}} value={editCategory} onChange={(e)=>setEditCategory(e.target.value)}>
-                          <option value="Genel">Genel</option>
-                          <option value="İş">İş</option>
-                          <option value="Okul">Okul</option>
-                          <option value="Alışveriş">Alışveriş</option>
-                          <option value="Spor">Spor</option>
-                        </select>
-
+                        <select className="form-select" style={{width:"100px"}} value={editCategory} onChange={(e)=>setEditCategory(e.target.value)}><option value="Genel">Genel</option><option value="İş">İş</option><option value="Okul">Okul</option><option value="Alışveriş">Alışveriş</option><option value="Spor">Spor</option></select>
                         <select className="form-select" style={{width:"90px"}} value={editPriority} onChange={(e)=>setEditPriority(e.target.value)}><option value="1">Düşük</option><option value="2">Orta</option><option value="3">Yüksek</option></select>
                         <input type="date" className="form-control" style={{width:"130px"}} value={editDate} onChange={(e)=>setEditDate(e.target.value)} />
                         <button className="btn btn-sm btn-success" onClick={() => saveEdit(gorev.id, gorev.isCompleted)}>💾</button>
                         <button className="btn btn-sm btn-secondary" onClick={() => setEditingId(null)}>🚫</button>
                       </div>
                     ) : (
-                      // NORMAL MODE
                       <div className="d-flex justify-content-between align-items-center">
                         <div style={{ flex: 1, cursor: "pointer" }} onClick={() => toggleComplete(gorev)}>
                           <span style={{ fontSize: "1.2rem", marginRight: "10px" }}>{gorev.isCompleted ? "✅" : "⬜"}</span>
-                          <span style={{ 
-                            textDecoration: gorev.isCompleted ? "line-through" : "none", 
-                            fontWeight: "500",
-                            color: gorev.isCompleted ? (darkMode ? '#777' : '#aaa') : 'inherit'
-                          }}>{gorev.title}</span>
-                          
-                          {/* KATEGORİ ETİKETİ */}
+                          <span style={{ textDecoration: gorev.isCompleted ? "line-through" : "none", fontWeight: "500", color: gorev.isCompleted ? (darkMode ? '#777' : '#aaa') : 'inherit' }}>{gorev.title}</span>
                           <span className="badge bg-info text-dark ms-2">{gorev.category || "Genel"}</span>
-
                           {getPriorityBadge(gorev.priority)}
                           {formatDateInfo(gorev.dueDate, gorev.isCompleted)}
                         </div>

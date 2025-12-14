@@ -29,14 +29,13 @@ namespace TodoListApi.Repositories
             }
         }
 
-        public List<TodoItem> GetAll()
+        // Parametre olarak int userId alıyoruz
+        public List<TodoItem> GetAll(int userId)
         {
-            // ESKİ HALİ: return _context.TodoItems.ToList();
-
-            // YENİ HALİ:
-            // 1. Önce Priority'ye göre BÜYÜKTEN KÜÇÜĞE sırala (3 -> 2 -> 1)
-            // 2. Eğer puanları eşitse, ID'ye göre tersten sırala (En son eklenen en üstte olsun)
             return _context.TodoItems
+                           // --- İŞTE BU SATIR ÇOK ÖNEMLİ ---
+                           .Where(x => x.UserId == userId)
+                           // --------------------------------
                            .OrderByDescending(x => x.Priority)
                            .ThenByDescending(x => x.Id)
                            .ToList();
