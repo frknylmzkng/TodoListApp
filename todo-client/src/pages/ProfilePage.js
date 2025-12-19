@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify'; // <--- İŞTE BU SATIRI YENİ EKLİYORUZ
 
 const ProfilePage = ({ userId, darkMode }) => {
   // Şifre Değiştirme State'leri
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [message, setMessage] = useState(""); // Başarılı/Hatalı mesajı için
+  // "message" state'ini SİLDİK (Artık Toast kullanıyoruz)
 
   const handleChangePassword = () => {
-    // API'ye istek at
     fetch("https://localhost:7221/api/Auth/change-password", {
       method: "POST",
       headers: { 'Content-Type': 'application/json' },
@@ -20,15 +20,16 @@ const ProfilePage = ({ userId, darkMode }) => {
     })
     .then(async (res) => {
       const data = await res.text();
-      // Mesajı ekrana yaz (Başarılıysa da hataysa da backend'den gelen metni yazıyoruz)
-      setMessage(res.ok ? `✅ ${data}` : `❌ ${data}`);
       
       if(res.ok) {
+        toast.success(data); // YEŞİL BİLDİRİM ✅
         setOldPassword("");
         setNewPassword("");
+      } else {
+        toast.error(data); // KIRMIZI BİLDİRİM ❌
       }
     })
-    .catch(err => setMessage("❌ Bir hata oluştu."));
+    .catch(err => toast.error("Bir hata oluştu."));
   };
 
   return (
@@ -48,8 +49,7 @@ const ProfilePage = ({ userId, darkMode }) => {
 
           <h5 className="mb-3">🔐 Şifre Değiştir</h5>
           
-          {/* Mesaj Kutusu */}
-          {message && <div className={`alert ${message.startsWith('✅') ? 'alert-success' : 'alert-danger'}`}>{message}</div>}
+          {/* ESKİ MESSAGE KUTUSU BURADAYDI, ARTIK YOK */}
 
           <div className="mb-3">
             <label className="form-label">Eski Şifre</label>

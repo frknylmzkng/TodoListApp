@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'react-toastify';
 
 const LoginPage = ({ onLogin }) => {
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -19,19 +20,20 @@ const LoginPage = ({ onLogin }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     })
-    .then(async (res) => {
+.then(async (res) => {
       const data = await res.text();
       if (!res.ok) throw new Error(data || "Hata oluştu");
 
       if (isLoginMode) {
-        onLogin(data); // App.js'e UserID gönder
+        toast.success("Giriş başarılı! Hoş geldiniz 🚀"); // Alert yerine Toast
+        onLogin(data);
       } else {
-        alert("Kayıt başarılı! Giriş yapabilirsiniz.");
+        toast.success("Kayıt başarılı! Şimdi giriş yapabilirsiniz. 🎉"); // Alert yerine Toast
         setIsLoginMode(true);
         setPassword("");
       }
     })
-    .catch(err => setError(err.message));
+    .catch(err => toast.error(err.message)); // Hata mesajını kırmızı göster
   };
 
   return (

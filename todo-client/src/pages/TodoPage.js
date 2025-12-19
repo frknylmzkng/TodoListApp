@@ -3,6 +3,8 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearSca
 import { Pie, Bar } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { toast } from 'react-toastify';
+import Swal from 'sweetalert2'; // <-- YENİ EKLENEN
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
@@ -38,19 +40,41 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
       .catch(err => console.error(err));
   };
 
-  // --- ALT GÖREV (SUB-TASK) İŞLEMLERİ (YENİ) ---
-  const handleAddSubTask = (todoId) => {
-    const title = window.prompt("Alt adım nedir?");
-    if (!title) return;
-
-    fetch(`${API_URL}/subtask`, {
-      method: "POST",
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title, isCompleted: false, todoItemId: todoId })
-    })
-    .then(res => {
-        if(res.ok) fetchAPI(); // Listeyi yenile ki alt görev görünsün
+const handleAddSubTask = async (todoId) => {
+    // SweetAlert2'nin Input özelliğini kullanıyoruz
+    const { value: text } = await Swal.fire({
+      title: 'Yeni Alt Adım',
+      input: 'text',
+      inputLabel: 'Yapılacak iş nedir?',
+      inputPlaceholder: 'Örn: Süt al...',
+      showCancelButton: true,
+      confirmButtonText: 'Ekle',
+      cancelButtonText: 'İptal',
+      confirmButtonColor: '#198754', // Yeşil buton
+      cancelButtonColor: '#d33',
+      background: darkMode ? '#333' : '#fff',
+      color: darkMode ? '#fff' : '#000',
+      inputValidator: (value) => {
+        if (!value) {
+          return 'Bir şeyler yazmalısın!';
+        }
+      }
     });
+
+    // Eğer kullanıcı bir şey yazıp "Ekle" dediyse:
+    if (text) {
+      fetch(`${API_URL}/subtask`, {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: text, isCompleted: false, todoItemId: todoId })
+      })
+      .then(res => {
+          if(res.ok) {
+              toast.success("Alt adım eklendi 🔗");
+              fetchAPI(); 
+          }
+      });
+    }
   };
 
   const handleToggleSubTask = (subId) => {
@@ -58,10 +82,30 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
       .then(res => { if(res.ok) fetchAPI(); });
   };
 
-  const handleDeleteSubTask = (subId) => {
-    if(!window.confirm("Bu alt adımı silmek istiyor musunuz?")) return;
-    fetch(`${API_URL}/subtask/${subId}`, { method: "DELETE" })
-      .then(res => { if(res.ok) fetchAPI(); });
+const handleDeleteSubTask = (subId) => {
+    // Alt görev için daha küçük bir soru kutusu
+    Swal.fire({
+      title: 'Alt adımı sil?',
+      text: "Bu işlem geri alınamaz.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sil',
+      cancelButtonText: 'İptal',
+      background: darkMode ? '#333' : '#fff',
+      color: darkMode ? '#fff' : '#000'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        fetch(`${API_URL}/subtask/${subId}`, { method: "DELETE" })
+          .then(res => { 
+            if(res.ok) {
+              toast.info("Alt adım silindi");
+              fetchAPI(); 
+            }
+          });
+      }
+    });
   };
 
   // --- SÜRÜKLE & BIRAK ---
@@ -79,17 +123,45 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
 
   // --- CRUD İşlemleri ---
   const addItem = () => {
-    if (!newItem) return;
+    if (!newItem){
+        toast.warn("Lütfen bir görev adı yazın! ⚠️"); // Sarı uyarı 
+        return;
+    }
     const taskToSend = { 
       title: newItem, isCompleted: false, priority: parseInt(newPriority), 
       dueDate: newDueDate ? newDueDate : null, category: newCategory, userId: parseInt(userId),
       orderIndex: todos.length 
     };
     fetch(API_URL, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskToSend) })
-    .then(res => res.json()).then(() => { setNewItem(""); setNewPriority(1); setNewDueDate(""); setNewCategory("Genel"); fetchAPI(); });
+    .then(res => res.json()).then(() => { toast.success("Görev eklendi! ✅"); setNewItem(""); setNewPriority(1); setNewDueDate(""); setNewCategory("Genel"); fetchAPI(); });
   };
 
-  const deleteItem = (id) => { fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) fetchAPI(); }); };
+const deleteItem = (id) => {
+    // SweetAlert2 ile soruyoruz
+    Swal.fire({
+      title: 'Emin misiniz?',
+      text: "Bu görevi silmek üzeresiniz, geri alınamaz!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33', // Silme butonu kırmızı olsun
+      cancelButtonColor: '#3085d6', // İptal butonu mavi
+      confirmButtonText: 'Evet, Sil!',
+      cancelButtonText: 'Vazgeç',
+      background: darkMode ? '#333' : '#fff', // Dark mode uyumu
+      color: darkMode ? '#fff' : '#000'
+    }).then((result) => {
+      // Eğer kullanıcı "Evet" derse silme işlemi başlar
+      if (result.isConfirmed) {
+        fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { 
+            if(res.ok) {
+                toast.info("Görev başarıyla silindi 🗑️"); // Toast ile bilgi ver
+                fetchAPI(); 
+            }
+        });
+      }
+    });
+  }; 
+
   const toggleComplete = (item) => { updateRequest({ ...item, isCompleted: !item.isCompleted }); };
   const updateRequest = (taskObj) => { fetch(`${API_URL}/${taskObj.id}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskObj) }).then(res => { if(res.ok) fetchAPI(); }); };
 

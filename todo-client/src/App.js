@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css'; // Stil dosyası şart!
 
 // Sayfaları İçe Aktar
 import LoginPage from './pages/LoginPage';
@@ -63,6 +65,7 @@ function App() {
           } 
         />
       </Routes>
+      <ToastContainer position="top-right" autoClose={3000} theme={darkMode ? "dark" : "light"} />
     </BrowserRouter>
   );
 }
