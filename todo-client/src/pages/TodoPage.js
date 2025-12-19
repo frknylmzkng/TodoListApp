@@ -1,15 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Pie, Bar } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { toast } from 'react-toastify';
-import Swal from 'sweetalert2'; // <-- YENİ EKLENEN
+import Swal from 'sweetalert2';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+
+// FULLCALENDAR IMPORTLARI
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import bootstrap5Plugin from '@fullcalendar/bootstrap5';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
   const [todos, setTodos] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   // State'ler
   const [newItem, setNewItem] = useState("");
@@ -25,7 +36,17 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
+  
+  // GÖRÜNÜM MODLARI
   const [showDashboard, setShowDashboard] = useState(false); 
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showPomodoro, setShowPomodoro] = useState(false); // <--- YENİ: Pomodoro Modu
+
+  // POMODORO STATE'LERİ
+  const [timer, setTimer] = useState(25 * 60); // 25 dakika (saniye cinsinden)
+  const [isActive, setIsActive] = useState(false);
+  const [mode, setMode] = useState("work"); // 'work' veya 'break'
+  const timerRef = useRef(null);
 
   const API_URL = "https://localhost:7221/api/Todo";
 
@@ -33,82 +54,82 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
     if (userId) fetchAPI();
   }, [userId]);
 
-  const fetchAPI = () => {
-    fetch(`${API_URL}?userId=${userId}`)
-      .then(res => res.json())
-      .then(data => setTodos(data))
-      .catch(err => console.error(err));
+  // POMODORO SAYACI MANTIĞI
+  useEffect(() => {
+    if (isActive && timer > 0) {
+      timerRef.current = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      clearInterval(timerRef.current);
+      setIsActive(false);
+      // Süre bittiğinde sesli veya görsel uyarı
+      if(mode === "work") {
+          toast.success("Tebrikler! Çalışma bitti. Şimdi mola zamanı! ☕");
+          setMode("break");
+          setTimer(5 * 60); // 5 dk mola
+      } else {
+          toast.info("Mola bitti! Hadi iş başına 🚀");
+          setMode("work");
+          setTimer(25 * 60); // 25 dk iş
+      }
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isActive, timer, mode]);
+
+  const toggleTimer = () => setIsActive(!isActive);
+  const resetTimer = () => {
+    setIsActive(false);
+    setMode("work");
+    setTimer(25 * 60);
+  };
+  
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes < 10 ? '0' : ''}${minutes}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-const handleAddSubTask = async (todoId) => {
-    // SweetAlert2'nin Input özelliğini kullanıyoruz
-    const { value: text } = await Swal.fire({
-      title: 'Yeni Alt Adım',
-      input: 'text',
-      inputLabel: 'Yapılacak iş nedir?',
-      inputPlaceholder: 'Örn: Süt al...',
-      showCancelButton: true,
-      confirmButtonText: 'Ekle',
-      cancelButtonText: 'İptal',
-      confirmButtonColor: '#198754', // Yeşil buton
-      cancelButtonColor: '#d33',
-      background: darkMode ? '#333' : '#fff',
-      color: darkMode ? '#fff' : '#000',
-      inputValidator: (value) => {
-        if (!value) {
-          return 'Bir şeyler yazmalısın!';
-        }
-      }
-    });
-
-    // Eğer kullanıcı bir şey yazıp "Ekle" dediyse:
-    if (text) {
-      fetch(`${API_URL}/subtask`, {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: text, isCompleted: false, todoItemId: todoId })
+  const fetchAPI = () => {
+    setIsLoading(true);
+    fetch(`${API_URL}?userId=${userId}`)
+      .then(res => res.json())
+      .then(data => {
+          setTodos(data);
+          setIsLoading(false);
       })
-      .then(res => {
-          if(res.ok) {
-              toast.success("Alt adım eklendi 🔗");
-              fetchAPI(); 
-          }
+      .catch(err => {
+          console.error(err);
+          setIsLoading(false);
+          toast.error("Veriler alınırken hata oluştu!");
       });
+  };
+
+  const calendarEvents = todos.map(todo => ({
+    id: todo.id.toString(),
+    title: todo.title,
+    date: todo.dueDate ? todo.dueDate.split('T')[0] : new Date(),
+    backgroundColor: todo.isCompleted ? '#198754' : (todo.priority === 3 ? '#dc3545' : '#0d6efd'),
+    borderColor: 'transparent',
+    allDay: true
+  }));
+
+  const handleAddSubTask = async (todoId) => {
+    const { value: text } = await Swal.fire({
+      title: 'Yeni Alt Adım', input: 'text', inputLabel: 'Yapılacak iş nedir?', inputPlaceholder: 'Örn: Süt al...', showCancelButton: true, confirmButtonText: 'Ekle', cancelButtonText: 'İptal', confirmButtonColor: '#198754', cancelButtonColor: '#d33', background: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000', inputValidator: (value) => { if (!value) return 'Bir şeyler yazmalısın!'; }
+    });
+    if (text) {
+      fetch(`${API_URL}/subtask`, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: text, isCompleted: false, todoItemId: todoId }) })
+      .then(res => { if(res.ok) { toast.success("Alt adım eklendi 🔗"); fetchAPI(); } });
     }
   };
 
-  const handleToggleSubTask = (subId) => {
-    fetch(`${API_URL}/subtask/${subId}`, { method: "PUT" })
-      .then(res => { if(res.ok) fetchAPI(); });
+  const handleToggleSubTask = (subId) => { fetch(`${API_URL}/subtask/${subId}`, { method: "PUT" }).then(res => { if(res.ok) fetchAPI(); }); };
+  const handleDeleteSubTask = (subId) => {
+    Swal.fire({ title: 'Alt adımı sil?', text: "Bu işlem geri alınamaz.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'Sil', cancelButtonText: 'İptal', background: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000' })
+    .then((result) => { if (result.isConfirmed) { fetch(`${API_URL}/subtask/${subId}`, { method: "DELETE" }).then(res => { if(res.ok) { toast.info("Alt adım silindi"); fetchAPI(); } }); } });
   };
 
-const handleDeleteSubTask = (subId) => {
-    // Alt görev için daha küçük bir soru kutusu
-    Swal.fire({
-      title: 'Alt adımı sil?',
-      text: "Bu işlem geri alınamaz.",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Sil',
-      cancelButtonText: 'İptal',
-      background: darkMode ? '#333' : '#fff',
-      color: darkMode ? '#fff' : '#000'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        fetch(`${API_URL}/subtask/${subId}`, { method: "DELETE" })
-          .then(res => { 
-            if(res.ok) {
-              toast.info("Alt adım silindi");
-              fetchAPI(); 
-            }
-          });
-      }
-    });
-  };
-
-  // --- SÜRÜKLE & BIRAK ---
   const handleOnDragEnd = (result) => {
     if (!result.destination) return;
     const items = Array.from(todos);
@@ -116,59 +137,26 @@ const handleDeleteSubTask = (subId) => {
     items.splice(result.destination.index, 0, reorderedItem);
     setTodos(items);
     const sortedIds = items.map(t => t.id);
-    fetch(`${API_URL}/reorder?userId=${userId}`, {
-        method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sortedIds)
-    }).catch(err => console.error(err));
+    fetch(`${API_URL}/reorder?userId=${userId}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sortedIds) }).catch(err => console.error(err));
   };
 
-  // --- CRUD İşlemleri ---
   const addItem = () => {
-    if (!newItem){
-        toast.warn("Lütfen bir görev adı yazın! ⚠️"); // Sarı uyarı 
-        return;
-    }
-    const taskToSend = { 
-      title: newItem, isCompleted: false, priority: parseInt(newPriority), 
-      dueDate: newDueDate ? newDueDate : null, category: newCategory, userId: parseInt(userId),
-      orderIndex: todos.length 
-    };
+    if (!newItem) { toast.warn("Lütfen bir görev adı yazın! ⚠️"); return; }
+    const taskToSend = { title: newItem, isCompleted: false, priority: parseInt(newPriority), dueDate: newDueDate ? newDueDate : null, category: newCategory, userId: parseInt(userId), orderIndex: todos.length };
     fetch(API_URL, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskToSend) })
     .then(res => res.json()).then(() => { toast.success("Görev eklendi! ✅"); setNewItem(""); setNewPriority(1); setNewDueDate(""); setNewCategory("Genel"); fetchAPI(); });
   };
 
-const deleteItem = (id) => {
-    // SweetAlert2 ile soruyoruz
-    Swal.fire({
-      title: 'Emin misiniz?',
-      text: "Bu görevi silmek üzeresiniz, geri alınamaz!",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33', // Silme butonu kırmızı olsun
-      cancelButtonColor: '#3085d6', // İptal butonu mavi
-      confirmButtonText: 'Evet, Sil!',
-      cancelButtonText: 'Vazgeç',
-      background: darkMode ? '#333' : '#fff', // Dark mode uyumu
-      color: darkMode ? '#fff' : '#000'
-    }).then((result) => {
-      // Eğer kullanıcı "Evet" derse silme işlemi başlar
-      if (result.isConfirmed) {
-        fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { 
-            if(res.ok) {
-                toast.info("Görev başarıyla silindi 🗑️"); // Toast ile bilgi ver
-                fetchAPI(); 
-            }
-        });
-      }
-    });
-  }; 
+  const deleteItem = (id) => { 
+    Swal.fire({ title: 'Emin misiniz?', text: "Bu görevi silmek üzeresiniz!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: 'Evet, Sil!', cancelButtonText: 'Vazgeç', background: darkMode ? '#333' : '#fff', color: darkMode ? '#fff' : '#000' })
+    .then((result) => { if (result.isConfirmed) { fetch(`${API_URL}/${id}`, { method: "DELETE" }).then(res => { if(res.ok) { toast.info("Görev silindi 🗑️"); fetchAPI(); } }); } });
+  };
 
   const toggleComplete = (item) => { updateRequest({ ...item, isCompleted: !item.isCompleted }); };
   const updateRequest = (taskObj) => { fetch(`${API_URL}/${taskObj.id}`, { method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskObj) }).then(res => { if(res.ok) fetchAPI(); }); };
-
   const startEditing = (item) => { setEditingId(item.id); setEditTitle(item.title); setEditPriority(item.priority); setEditDate(item.dueDate ? item.dueDate.split('T')[0] : ""); setEditCategory(item.category || "Genel"); };
   const saveEdit = (id, cur) => { updateRequest({ id, title: editTitle, isCompleted: cur, priority: parseInt(editPriority), dueDate: editDate ? editDate : null, category: editCategory }); setEditingId(null); };
 
-  // --- FİLTRE & GRAFİK ---
   const filteredTodos = todos.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
     let matchesFilter = true;
@@ -192,9 +180,20 @@ const deleteItem = (id) => {
          <h2 className={`fw-bold ${darkMode ? 'text-info' : 'text-primary'}`}>🚀 Görev Yöneticisi</h2>
          <div className="d-flex gap-2">
             <Link to="/profile" className="btn btn-outline-info">👤 Profil</Link>
-            <button className={`btn ${darkMode ? 'btn-outline-light' : 'btn-outline-dark'}`} onClick={() => setShowDashboard(!showDashboard)}>
-              {showDashboard ? "Gizle" : "📊 Analiz"}
-            </button>
+            
+            <div className="btn-group">
+                {/* NAVİGASYON BUTONLARI: Her biri diğerlerini kapatır */}
+                <button className={`btn ${showDashboard ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => {setShowDashboard(!showDashboard); setShowCalendar(false); setShowPomodoro(false);}}>
+                    📊 Analiz
+                </button>
+                <button className={`btn ${showCalendar ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => {setShowCalendar(!showCalendar); setShowDashboard(false); setShowPomodoro(false);}}>
+                    📅 Takvim
+                </button>
+                <button className={`btn ${showPomodoro ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => {setShowPomodoro(!showPomodoro); setShowDashboard(false); setShowCalendar(false);}}>
+                    🍅 Odaklan
+                </button>
+            </div>
+
             <button className={`btn ${darkMode ? 'btn-warning' : 'btn-secondary'}`} onClick={() => setDarkMode(!darkMode)}>
               {darkMode ? "☀️" : "🌙"}
             </button>
@@ -202,13 +201,57 @@ const deleteItem = (id) => {
          </div>
       </div>
 
+      {/* 1. DASHBOARD MODU */}
       {showDashboard && (
-        <div className="row mb-4">
+        <div className="row mb-4 animate__animated animate__fadeIn">
           <div className="col-md-6"><div className="card shadow-sm h-100"><div className="card-header text-center fw-bold">Durum</div><div className="card-body d-flex justify-content-center" style={{maxHeight:"300px"}}><Pie data={pieData} options={chartOptions}/></div></div></div>
           <div className="col-md-6 mt-3 mt-md-0"><div className="card shadow-sm h-100"><div className="card-header text-center fw-bold">Öncelik</div><div className="card-body d-flex justify-content-center" style={{maxHeight:"300px"}}><Bar data={barData} options={{...chartOptions, plugins:{legend:{display:false}}}}/></div></div></div>
         </div>
       )}
 
+      {/* 2. TAKVİM MODU */}
+      {showCalendar && (
+        <div className="card shadow-lg mb-4 animate__animated animate__fadeIn">
+            <div className="card-body">
+                <FullCalendar
+                    plugins={[ dayGridPlugin, timeGridPlugin, interactionPlugin, bootstrap5Plugin ]}
+                    initialView="dayGridMonth"
+                    themeSystem="bootstrap5"
+                    locale="tr"
+                    headerToolbar={{ left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' }}
+                    events={calendarEvents}
+                    height="auto"
+                    contentHeight={500}
+                />
+            </div>
+        </div>
+      )}
+
+      {/* 3. POMODORO MODU (YENİ) */}
+      {showPomodoro && (
+        <div className="card shadow-lg mb-4 text-center p-5 animate__animated animate__fadeIn" style={{ backgroundColor: mode === 'work' ? (darkMode ? '#5c1e1e' : '#fff0f0') : (darkMode ? '#1e5c30' : '#f0fff4') }}>
+            <h1 style={{ fontSize: "6rem", fontWeight: "bold", fontFamily: "monospace", color: mode==='work' ? '#dc3545' : '#198754' }}>
+                {formatTime(timer)}
+            </h1>
+            <h3 className="mb-4">{mode === 'work' ? "🔨 ÇALIŞMA ZAMANI" : "☕ MOLA ZAMANI"}</h3>
+            
+            <div className="d-flex justify-content-center gap-3">
+                <button className="btn btn-lg btn-primary px-5" onClick={toggleTimer}>
+                    {isActive ? "Duraklat ⏸️" : "Başlat ▶️"}
+                </button>
+                <button className="btn btn-lg btn-secondary px-5" onClick={resetTimer}>
+                    Sıfırla 🔄
+                </button>
+            </div>
+            
+            <div className="mt-4 text-muted">
+                <small>{mode === 'work' ? "25 dakika boyunca sadece işine odaklan!" : "5 dakika boyunca ekran başından kalk."}</small>
+            </div>
+        </div>
+      )}
+
+      {/* 4. NORMAL GÖREV LİSTESİ (Diğer modlar kapalıysa görünür) */}
+      {!showCalendar && !showDashboard && !showPomodoro && (
       <div className="card shadow-lg">
         <div className={`card-header py-3 ${darkMode ? 'bg-secondary text-white' : 'bg-primary text-white'}`}><h5 className="mb-0 text-center">Listem</h5></div>
         <div className="card-body">
@@ -225,20 +268,21 @@ const deleteItem = (id) => {
             <div className="col-md-1"><button className="btn btn-success w-100" onClick={addItem}>+</button></div>
           </div>
 
-          <DragDropContext onDragEnd={handleOnDragEnd}>
+          {isLoading ? (
+            <div className="mt-3">
+               {[...Array(6)].map((_, i) => (
+                  <div key={i} className="mb-2"><Skeleton height={60} borderRadius={8} baseColor={darkMode ? "#2c3034" : "#e0e0e0"} highlightColor={darkMode ? "#444" : "#f5f5f5"} /></div>
+               ))}
+            </div>
+          ) : (
+            <DragDropContext onDragEnd={handleOnDragEnd}>
             <Droppable droppableId="todoList">
               {(provided) => (
                 <ul className="list-group list-group-flush" {...provided.droppableProps} ref={provided.innerRef}>
                   {filteredTodos.map((t, index) => (
                     <Draggable key={t.id} draggableId={t.id.toString()} index={index} isDragDisabled={filterType !== 'all' || searchTerm !== ""}>
                       {(provided, snapshot) => (
-                        <li 
-                           ref={provided.innerRef}
-                           {...provided.draggableProps}
-                           {...provided.dragHandleProps}
-                           className={`list-group-item ${snapshot.isDragging ? 'bg-info bg-opacity-25 shadow' : ''}`}
-                           style={{ ...provided.draggableProps.style }}
-                        >
+                        <li ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`list-group-item ${snapshot.isDragging ? 'bg-info bg-opacity-25 shadow' : ''}`} style={{ ...provided.draggableProps.style }}>
                           {editingId===t.id ? (
                             <div className="d-flex gap-2 flex-wrap">
                               <input className="form-control" style={{flex:1}} value={editTitle} onChange={(e)=>setEditTitle(e.target.value)}/>
@@ -248,7 +292,6 @@ const deleteItem = (id) => {
                             </div>
                           ) : (
                             <div>
-                                {/* ANA GÖREV SATIRI */}
                                 <div className="d-flex justify-content-between align-items-center">
                                   <div style={{flex:1, cursor:"pointer", display:"flex", alignItems:"center"}}>
                                      <span className="text-muted me-2" style={{cursor:"grab"}}>⋮⋮</span>
@@ -259,48 +302,17 @@ const deleteItem = (id) => {
                                         {getPriorityBadge(t.priority)} {formatDateInfo(t.dueDate, t.isCompleted)}
                                      </div>
                                   </div>
-{/* BUTON GRUBU - Hepsi eşitlendi */}
                                   <div className="d-flex align-items-center">
-                                    
-                                    {/* 1. ALT GÖREV EKLEME (+) */}
-                                    <button 
-                                        className="btn btn-sm btn-outline-secondary me-2 rounded-circle p-0 d-flex align-items-center justify-content-center" 
-                                        style={{ width: "32px", height: "32px" }} 
-                                        onClick={() => handleAddSubTask(t.id)} 
-                                        title="Alt Adım Ekle"
-                                    >
-                                        <span style={{ fontSize: "22px", lineHeight: 0, paddingBottom: "2px" }}>+</span>
-                                    </button>
-                                    
-                                    {/* 2. DÜZENLEME (✏️) */}
-                                    <button 
-                                        className="btn btn-outline-primary btn-sm me-2 rounded-circle p-0 d-flex align-items-center justify-content-center" 
-                                        style={{width:"32px", height:"32px"}} 
-                                        onClick={()=>startEditing(t)}
-                                    >
-                                        <span style={{ fontSize: "16px", lineHeight: 0 }}>✏️</span>
-                                    </button>
-
-                                    {/* 3. SİLME (X) */}
-                                    <button 
-                                        className="btn btn-outline-danger btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center" 
-                                        style={{width:"32px", height:"32px"}} 
-                                        onClick={()=>deleteItem(t.id)}
-                                    >
-                                        <span style={{ fontSize: "16px", lineHeight: 0 }}>❌</span>
-                                    </button>
-
+                                    <button className="btn btn-sm btn-outline-secondary me-2 rounded-circle p-0 d-flex align-items-center justify-content-center" style={{ width: "32px", height: "32px" }} onClick={() => handleAddSubTask(t.id)} title="Alt Adım Ekle"><span style={{ fontSize: "22px", lineHeight: 0, paddingBottom: "2px" }}>+</span></button>
+                                    <button className="btn btn-outline-primary btn-sm me-2 rounded-circle p-0 d-flex align-items-center justify-content-center" style={{width:"32px", height:"32px"}} onClick={()=>startEditing(t)}><span style={{ fontSize: "16px", lineHeight: 0 }}>✏️</span></button>
+                                    <button className="btn btn-outline-danger btn-sm rounded-circle p-0 d-flex align-items-center justify-content-center" style={{width:"32px", height:"32px"}} onClick={()=>deleteItem(t.id)}><span style={{ fontSize: "16px", lineHeight: 0 }}>❌</span></button>
                                   </div>
                                 </div>
-
-                                {/* YENİ: ALT GÖREVLER (SUB-TASKS) LİSTESİ */}
                                 {t.subItems && t.subItems.length > 0 && (
                                     <div className="mt-2 ps-4 border-start border-3 border-light">
                                         {t.subItems.map(sub => (
                                             <div key={sub.id} className="d-flex justify-content-between align-items-center mb-1" style={{fontSize: "0.9rem"}}>
-                                                <div onClick={() => handleToggleSubTask(sub.id)} style={{cursor: "pointer", color: sub.isCompleted ? "#aaa" : "inherit"}}>
-                                                    {sub.isCompleted ? "☑️" : "⬜"} {sub.isCompleted ? <del>{sub.title}</del> : sub.title}
-                                                </div>
+                                                <div onClick={() => handleToggleSubTask(sub.id)} style={{cursor: "pointer", color: sub.isCompleted ? "#aaa" : "inherit"}}>{sub.isCompleted ? "☑️" : "⬜"} {sub.isCompleted ? <del>{sub.title}</del> : sub.title}</div>
                                                 <button className="btn btn-link text-danger p-0 ms-2" style={{textDecoration:"none"}} onClick={() => handleDeleteSubTask(sub.id)}>×</button>
                                             </div>
                                         ))}
@@ -317,8 +329,10 @@ const deleteItem = (id) => {
               )}
             </Droppable>
           </DragDropContext>
+          )}
         </div>
       </div>
+      )}
     </div>
   );
 };
