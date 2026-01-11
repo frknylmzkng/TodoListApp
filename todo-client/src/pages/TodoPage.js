@@ -95,8 +95,13 @@ const TodoPage = ({ userId, darkMode, setDarkMode, onLogout }) => {
       })
       .then(async res => {
         toast.dismiss(loadingToast);
-        if (res.ok) { toast.success("Yüklendi! 📎"); fetchAPI(); } 
-        else { toast.error("Yükleme başarısız."); }
+        if (res.ok) {toast.success("Yüklendi! 📎");fetchAPI();}
+        else { 
+      // Sunucudan gelen özel hata mesajını oku (text olarak)
+      const errorMsg = await res.text();
+      // O mesajı ekrana bas (Eğer mesaj boşsa standart uyarıyı göster)
+      toast.error(errorMsg || "Yükleme başarısız."); 
+  }
       })
       .catch(() => { toast.dismiss(loadingToast); toast.error("Hata oluştu."); });
     }
