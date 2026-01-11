@@ -104,39 +104,61 @@ namespace TodoListApi.Controllers
         [HttpPost("upload/{id}")]
         public async Task<IActionResult> UploadFile(int id, IFormFile file)
         {
-            // 1. Dosya var mı kontrol et
+            // ... (Önceki User kontrol kodları buradaysa kalsın) ...
+
+            var todoItem = await _context.TodoItems.FindAsync(id);
+            if (todoItem == null) return NotFound("Görev bulunamadı.");
+
             if (file == null || file.Length == 0)
                 return BadRequest("Dosya seçilmedi.");
 
-            // 2. İlgili görevi bul
-            var todoItem = await _context.TodoItems.FindAsync(id);
-            if (todoItem == null)
-                return NotFound("Görev bulunamadı.");
+            // --- YENİ GÜVENLİK KONTROLÜ BAŞLANGICI ---
+            if (!IsValidFileSignature(file))
+            {
+                return BadRequest("UYARI: Dosya içeriği, uzantısıyla uyuşmuyor! Bu dosya sahte olabilir.");
+            }
+            // --- GÜVENLİK KONTROLÜ BİTİŞİ ---
 
-            // 3. Dosya adını güvenli hale getir (Guid ekle ki isimler çakışmasın)
-            // Örnek: "ödev.pdf" -> "b12a-345c-ödev.pdf"
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+            // ... (Buradan sonrası eski kodunla aynı kalacak: Klasör oluşturma, kaydetme vs.) ...
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
-            // 4. Kaydedilecek klasörü belirle (wwwroot/uploads)
-            var uploadPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            var uniqueFileName = Guid.NewGuid().ToString() + "_" + file.FileName;
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
-            // Klasör yoksa oluştur
-            if (!Directory.Exists(uploadPath))
-                Directory.CreateDirectory(uploadPath);
-
-            var filePath = Path.Combine(uploadPath, fileName);
-
-            // 5. Dosyayı diske kaydet
             using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await file.CopyToAsync(stream);
             }
 
-            // 6. Veritabanına yolunu yaz (Örn: "uploads/b12a...pdf")
-            todoItem.AttachmentPath = "uploads/" + fileName;
+            todoItem.AttachmentPath = "uploads/" + uniqueFileName;
             await _context.SaveChangesAsync();
 
             return Ok(new { path = todoItem.AttachmentPath });
+        }
+
+        // Dosyanın gerçekten o uzantıda olup olmadığının kontrolü
+        private bool IsValidFileSignature(IFormFile file)
+        {
+            using (var reader = new BinaryReader(file.OpenReadStream()))
+            {
+                var signatures = new Dictionary<string, List<byte[]>>
+        {
+            { ".png", new List<byte[]> { new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A } } },
+            { ".jpeg", new List<byte[]> { new byte[] { 0xFF, 0xD8, 0xFF } } },
+            { ".jpg", new List<byte[]> { new byte[] { 0xFF, 0xD8, 0xFF } } },
+            { ".pdf", new List<byte[]> { new byte[] { 0x25, 0x50, 0x44, 0x46 } } }
+        };
+
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                if (!signatures.ContainsKey(ext)) return true; // Tanımadığımız dosyaları (txt vs) şimdilik kabul edelim.
+
+                var headerBytes = reader.ReadBytes(signatures[ext].Max(m => m.Length));
+
+                return signatures[ext].Any(signature =>
+                    headerBytes.Take(signature.Length).SequenceEqual(signature)
+                );
+            }
         }
     }
 }

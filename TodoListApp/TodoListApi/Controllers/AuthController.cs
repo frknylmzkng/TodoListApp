@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace TodoListApi.Controllers
 {
@@ -36,6 +37,7 @@ namespace TodoListApi.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("LoginPolicy")] //RateLimiting koruması
         public IActionResult Login([FromBody] LoginRequest loginRequest)
         {
             var user = _context.Users.FirstOrDefault(u => u.Username == loginRequest.Username && u.Password == loginRequest.Password);

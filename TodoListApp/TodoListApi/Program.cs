@@ -5,6 +5,8 @@ using TodoListApi.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +38,22 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 // Swagger (API Test Ekraný)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// --- RATE LIMITING (Hýz Sýnýrlama) AYARLARI ---
+builder.Services.AddRateLimiter(options =>
+{
+    // "LoginPolicy" adýnda bir kural oluþturuyoruz
+    options.AddFixedWindowLimiter("LoginPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1); // Süre: 1 Dakika
+        opt.PermitLimit = 5;                  // Hak: 5 Deneme
+        opt.QueueLimit = 0;                   // Sýrada bekletme: Yok (Direkt reddet)
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+
+    // Sýnýr aþýlýnca verilecek hata kodu: 429 (Too Many Requests)
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // JWT AYARLARI
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -71,6 +89,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors(); // CORS'u aktif et
+app.UseRateLimiter();
 app.UseStaticFiles(); // <--- BU SATIR ÇOK ÖNEMLÝ! Dosyalara eriþimi açar.
 app.UseAuthentication(); // <--- Önce kimlik kontrolü
 app.UseAuthorization();  // <--- Sonra yetki kontrolü
