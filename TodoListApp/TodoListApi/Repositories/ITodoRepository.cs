@@ -10,5 +10,6 @@ namespace TodoListApi.Repositories
         void Update(TodoItem item);       // Güncelle
         void Delete(int id);              // Sil
         TodoItem GetById(int id);         // Tek bir tane bul (Detay için)
+        void UpdateOrder(int userId, List<int> sortedIds);
     }
 }

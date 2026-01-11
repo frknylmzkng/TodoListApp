@@ -20,5 +20,12 @@
 
         // YENİ: Bu görev kime ait?
         public int UserId { get; set; }
+
+        // YENİ: Sıralama İndeksi (0, 1, 2...) SürükleBırak için
+        public int OrderIndex { get; set; } = 0;
+
+        // YENİ: Alt Görevler Listesi
+        public List<SubTodoItem> SubItems { get; set; } = new List<SubTodoItem>();
+        public string? AttachmentPath { get; set; }
     }
 }

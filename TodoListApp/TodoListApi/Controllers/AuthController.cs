@@ -1,8 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TodoListApi.Data;
 using TodoListApi.Models;
-using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace TodoListApi.Controllers
 {
@@ -11,70 +14,70 @@ namespace TodoListApi.Controllers
     public class AuthController : ControllerBase
     {
         private readonly TodoContext _context;
+        private readonly IConfiguration _configuration; // <--- YENİ: Ayarları okumak için
 
-        public AuthController(TodoContext context)
+        public AuthController(TodoContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
-        // 1. KAYIT OL (REGISTER)
         [HttpPost("register")]
-        public IActionResult Register(UserDto request)
+        public IActionResult Register([FromBody] User user)
         {
-            // Kullanıcı zaten var mı?
-            if (_context.Users.Any(u => u.Username == request.Username))
+            if (_context.Users.Any(u => u.Username == user.Username))
             {
                 return BadRequest("Bu kullanıcı adı zaten alınmış.");
             }
 
-            // Yeni kullanıcı oluştur ve şifreyi hashle
-            var user = new User
-            {
-                Username = request.Username,
-                PasswordHash = HashPassword(request.Password)
-            };
-
             _context.Users.Add(user);
             _context.SaveChanges();
-
-            return Ok("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
+            return Ok("Kayıt başarılı!");
         }
 
-        // 2. GİRİŞ YAP (LOGIN)
         [HttpPost("login")]
-        public IActionResult Login(UserDto request)
+        public IActionResult Login([FromBody] LoginRequest loginRequest)
         {
-            // Kullanıcıyı bul
-            var user = _context.Users.FirstOrDefault(u => u.Username == request.Username);
-
+            var user = _context.Users.FirstOrDefault(u => u.Username == loginRequest.Username && u.Password == loginRequest.Password);
             if (user == null)
             {
-                return BadRequest("Kullanıcı bulunamadı.");
+                return Unauthorized("Kullanıcı adı veya şifre hatalı.");
             }
 
-            // Şifreyi kontrol et (Gelen şifreyi hashleyip veritabanındakiyle kıyasla)
-            if (user.PasswordHash != HashPassword(request.Password))
-            {
-                return BadRequest("Yanlış şifre!");
-            }
+            // <--- YENİ: Token Üretimi Başlıyor
+            var token = GenerateToken(user);
 
-            // Başarılı! Kullanıcının ID'sini dönelim (Frontend bunu kullanacak)
-            return Ok(user.Id);
+            return Ok(new { token = token, userId = user.Id, username = user.Username });
         }
 
-        // --- YARDIMCI METOT: ŞİFREYİ HASHLEME ---
-        private string HashPassword(string password)
+        // --- YENİ: Token Oluşturan Özel Metot ---
+        private string GenerateToken(User user)
         {
-            using (var sha256 = SHA256.Create())
+            var jwtSettings = _configuration.GetSection("JwtSettings");
+            var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!);
+
+            var claims = new[]
             {
-                var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                var builder = new StringBuilder();
-                foreach (var b in bytes)
-                {
-                    builder.Append(b.ToString("x2"));
-                }
-                return builder.ToString();
-            }
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.Username)
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: jwtSettings["Issuer"],
+                audience: jwtSettings["Audience"],
+                claims: claims,
+                expires: DateTime.Now.AddHours(1), // Token 1 saat geçerli olsun
+                signingCredentials: new SigningCredentials(new SymmetricSecurityKey(secretKey), SecurityAlgorithms.HmacSha256)
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
+    }
+
+    // Login için basit bir model (Aynı dosyanın en altına koyabilirsin)
+    public class LoginRequest
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
     }
 }

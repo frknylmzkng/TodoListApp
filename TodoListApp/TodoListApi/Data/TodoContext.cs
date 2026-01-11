@@ -14,6 +14,7 @@ namespace TodoListApi.Data
         // Bu satır, "TodoItem" modelinin veritabanında bir TABLO olacağını söyler.
         // Tablonun adı "TodoItems" olacak.
         public DbSet<TodoItem> TodoItems { get; set; }
+        public DbSet<Category> Categories { get; set; }
 
         public DbSet<User> Users { get; set; }
     }
